@@ -100,6 +100,12 @@ func TestExpandPlaceholders(t *testing.T) {
 			want:   "Band - {unknown}",
 		},
 		{
+			name:   "disknumber can be zero padded for filenames",
+			format: "{disknumber}-{tracknumber}",
+			attrs:  map[string]string{"{disknumber}": "01", "{tracknumber}": "07"},
+			want:   "01-07",
+		},
+		{
 			name:   "no placeholders",
 			format: "literal string",
 			attrs:  map[string]string{"{key}": "value"},

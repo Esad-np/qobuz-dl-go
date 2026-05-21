@@ -635,7 +635,7 @@ func (d *Downloader) downloadAndTag(
 		"{artist}":        performer,
 		"{albumartist}":   nestedStr(albumMeta, "artist", "name"),
 		"{bit_depth}":     fmt.Sprintf("%v", trackMeta["maximum_bit_depth"]),
-		"{disknumber}":    fmt.Sprintf("%d", mediaNumberOrDefault(trackMeta)),
+		"{disknumber}":    fmt.Sprintf("%02d", mediaNumberOrDefault(trackMeta)),
 		"{sampling_rate}": fmt.Sprintf("%v", trackMeta["maximum_sampling_rate"]),
 		"{version}":       fmt.Sprintf("%v", trackMeta["version"]),
 	}
