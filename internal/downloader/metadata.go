@@ -7,25 +7,32 @@ package downloader
 // Both are pure-Go implementations with no external dependencies.
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"unicode/utf16"
+
+	"golang.org/x/image/draw"
 )
+
+const embeddedCoverJPEGQuality = 92
 
 // ---- FLAC tagging ----
 
 // tagFLAC writes Vorbis Comment metadata to a FLAC file,
 // then renames tmpFile → finalFile.
-func tagFLAC(tmpFile, coverDir, finalFile string, track, album map[string]interface{}, isTrack, embedArt bool) error {
+func tagFLAC(tmpFile, coverDir, finalFile string, track, album map[string]interface{}, isTrack, embedArt bool, coverSizeEmbeddedPixels int) error {
 	tags := buildFLACTags(track, album, isTrack)
 	if err := writeFLACTags(tmpFile, tags); err != nil {
 		return err
 	}
 	if embedArt {
-		if err := embedFLACCover(tmpFile, coverDir); err != nil {
+		if err := embedFLACCover(tmpFile, coverDir, coverSizeEmbeddedPixels); err != nil {
 			fmt.Printf("\033[33mWarning: could not embed cover: %v\033[0m\n", err)
 		}
 	}
@@ -199,18 +206,18 @@ func appendU32LE(b []byte, v uint32) []byte {
 	return append(b, byte(v), byte(v>>8), byte(v>>16), byte(v>>24))
 }
 
-func embedFLACCover(flacPath, coverDir string) error {
+func embedFLACCover(flacPath, coverDir string, coverSizeEmbeddedPixels int) error {
 	coverPath := findCover(coverDir)
 	if coverPath == "" {
 		return fmt.Errorf("cover not found")
 	}
-	imgData, err := os.ReadFile(coverPath)
+	imgData, width, height, err := loadEmbeddedCover(coverPath, coverSizeEmbeddedPixels)
 	if err != nil {
 		return err
 	}
 
 	const typePicture = 6
-	picBlock := buildFLACPictureBlock(imgData)
+	picBlock := buildFLACPictureBlock(imgData, width, height)
 	data, err := os.ReadFile(flacPath)
 	if err != nil {
 		return err
@@ -266,7 +273,7 @@ func embedFLACCover(flacPath, coverDir string) error {
 	return os.WriteFile(flacPath, out, 0644)
 }
 
-func buildFLACPictureBlock(imgData []byte) []byte {
+func buildFLACPictureBlock(imgData []byte, width, height int) []byte {
 	mimeType := "image/jpeg"
 	desc := ""
 	// FLAC picture block layout (all big-endian uint32):
@@ -278,10 +285,10 @@ func buildFLACPictureBlock(imgData []byte) []byte {
 	buf = append(buf, []byte(mimeType)...)
 	buf = appendU32BE(buf, uint32(len(desc)))
 	buf = append(buf, []byte(desc)...)
-	buf = appendU32BE(buf, 0) // width (unknown)
-	buf = appendU32BE(buf, 0) // height
-	buf = appendU32BE(buf, 0) // color depth
-	buf = appendU32BE(buf, 0) // color count
+	buf = appendU32BE(buf, uint32(width))
+	buf = appendU32BE(buf, uint32(height))
+	buf = appendU32BE(buf, 24) // JPEG RGB
+	buf = appendU32BE(buf, 0)  // color count
 	buf = appendU32BE(buf, uint32(len(imgData)))
 	buf = append(buf, imgData...)
 	return buf
@@ -307,9 +314,9 @@ func findCover(dir string) string {
 // ---- MP3 ID3v2.3 tagging ----
 
 // tagMP3 writes ID3v2.3 tags to tmpFile, then renames to finalFile.
-func tagMP3(tmpFile, coverDir, finalFile string, track, album map[string]interface{}, isTrack, embedArt bool) error {
+func tagMP3(tmpFile, coverDir, finalFile string, track, album map[string]interface{}, isTrack, embedArt bool, coverSizeEmbeddedPixels int) error {
 	tags := buildMP3Tags(track, album, isTrack)
-	if err := writeID3v23(tmpFile, tags, embedArt, coverDir); err != nil {
+	if err := writeID3v23(tmpFile, tags, embedArt, coverDir, coverSizeEmbeddedPixels); err != nil {
 		return err
 	}
 	return os.Rename(tmpFile, finalFile)
@@ -365,7 +372,7 @@ func buildMP3Tags(track, album map[string]interface{}, isTrack bool) map[string]
 }
 
 // writeID3v23 prepends an ID3v2.3 tag block to the MP3 file.
-func writeID3v23(path string, tags map[string]string, embedArt bool, coverDir string) error {
+func writeID3v23(path string, tags map[string]string, embedArt bool, coverDir string, coverSizeEmbeddedPixels int) error {
 	// Build frames
 	var frames []byte
 	for frameID, text := range tags {
@@ -379,7 +386,7 @@ func writeID3v23(path string, tags map[string]string, embedArt bool, coverDir st
 	if embedArt {
 		coverPath := findCover(coverDir)
 		if coverPath != "" {
-			if imgData, err := os.ReadFile(coverPath); err == nil {
+			if imgData, _, _, err := loadEmbeddedCover(coverPath, coverSizeEmbeddedPixels); err == nil {
 				frame := buildAPICFrame(imgData)
 				frames = append(frames, frame...)
 			}
@@ -469,6 +476,64 @@ func toSyncsafe(n int) [4]byte {
 	b[1] = byte((n >> 14) & 0x7F)
 	b[0] = byte((n >> 21) & 0x7F)
 	return b
+}
+
+func loadEmbeddedCover(coverPath string, coverSizeEmbeddedPixels int) ([]byte, int, int, error) {
+	imgData, err := os.ReadFile(coverPath)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if coverSizeEmbeddedPixels <= 0 {
+		return nil, 0, 0, fmt.Errorf("cover_size_embedded_pixels must be > 0")
+	}
+
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(imgData))
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("decode cover config: %w", err)
+	}
+	if format != "jpeg" {
+		return nil, 0, 0, fmt.Errorf("unsupported cover format: %s", format)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, 0, 0, fmt.Errorf("invalid cover dimensions: %dx%d", cfg.Width, cfg.Height)
+	}
+	if cfg.Width <= coverSizeEmbeddedPixels && cfg.Height <= coverSizeEmbeddedPixels {
+		return imgData, cfg.Width, cfg.Height, nil
+	}
+
+	src, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("decode cover image: %w", err)
+	}
+	width, height := fitWithin(cfg.Width, cfg.Height, coverSizeEmbeddedPixels)
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: embeddedCoverJPEGQuality}); err != nil {
+		return nil, 0, 0, fmt.Errorf("encode resized cover: %w", err)
+	}
+	return out.Bytes(), width, height, nil
+}
+
+func fitWithin(width, height, maxSide int) (int, int) {
+	if width <= maxSide && height <= maxSide {
+		return width, height
+	}
+	if width >= height {
+		newWidth := maxSide
+		newHeight := height * maxSide / width
+		if newHeight < 1 {
+			newHeight = 1
+		}
+		return newWidth, newHeight
+	}
+	newHeight := maxSide
+	newWidth := width * maxSide / height
+	if newWidth < 1 {
+		newWidth = 1
+	}
+	return newWidth, newHeight
 }
 
 func readMP3Audio(path string) ([]byte, error) {

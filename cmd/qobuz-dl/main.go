@@ -35,6 +35,8 @@ Options:
   -d <dir>           Download directory
   -q <quality>       Quality: 5=MP3, 6=LOSSLESS, 7=24B<96k, 27=24B>96k
   --embed-art        Embed cover art in files
+  --cover-size-embedded-pixels N
+                     Downscale embedded cover art to fit within NxN (default 500, never upscales)
   --albums-only      Skip singles/EPs
   --no-m3u           Skip M3U playlist creation
   --no-fallback      Disable quality fallback
@@ -222,19 +224,20 @@ func loadOrInitConfig(ctx context.Context, skipCredentials bool) (*config.Config
 // cliFlags groups the download-related flags shared by dl/lucky/csv/fun.
 // Lucky/CSV-specific flags (lucky-type, lucky-n, failed) stay separate.
 type cliFlags struct {
-	Dir          string
-	Quality      int
-	EmbedArt     bool
-	AlbumsOnly   bool
-	NoM3U        bool
-	NoFallback   bool
-	OGCover      bool
-	NoCover      bool
-	NoDB         bool
-	Workers      int
-	FolderFormat string
-	TrackFormat  string
-	SmartDiscog  bool
+	Dir                     string
+	Quality                 int
+	EmbedArt                bool
+	AlbumsOnly              bool
+	NoM3U                   bool
+	NoFallback              bool
+	OGCover                 bool
+	CoverSizeEmbeddedPixels int
+	NoCover                 bool
+	NoDB                    bool
+	Workers                 int
+	FolderFormat            string
+	TrackFormat             string
+	SmartDiscog             bool
 }
 
 func registerDownloadFlags(fs *flag.FlagSet) *cliFlags {
@@ -246,6 +249,7 @@ func registerDownloadFlags(fs *flag.FlagSet) *cliFlags {
 	fs.BoolVar(&f.NoM3U, "no-m3u", false, "")
 	fs.BoolVar(&f.NoFallback, "no-fallback", false, "")
 	fs.BoolVar(&f.OGCover, "og-cover", false, "")
+	fs.IntVar(&f.CoverSizeEmbeddedPixels, "cover-size-embedded-pixels", 0, "")
 	fs.BoolVar(&f.NoCover, "no-cover", false, "")
 	fs.BoolVar(&f.NoDB, "no-db", false, "")
 	fs.IntVar(&f.Workers, "workers", 0, "")
@@ -287,6 +291,13 @@ func initDownloader(ctx context.Context, f *cliFlags) (*downloader.Downloader, e
 	if trackFmt == "" {
 		trackFmt = cfg.TrackFormat
 	}
+	coverSizeEmbeddedPixels := f.CoverSizeEmbeddedPixels
+	if coverSizeEmbeddedPixels == 0 {
+		coverSizeEmbeddedPixels = cfg.CoverSizeEmbeddedPixels
+	}
+	if coverSizeEmbeddedPixels <= 0 {
+		return nil, fmt.Errorf("cover_size_embedded_pixels must be > 0")
+	}
 
 	client := api.New(cfg.AppID, cfg.Secrets)
 
@@ -306,20 +317,21 @@ func initDownloader(ctx context.Context, f *cliFlags) (*downloader.Downloader, e
 	fmt.Printf("\033[33mSet max quality: %s\033[0m\n", qualityNames[quality])
 
 	opts := downloader.Options{
-		Directory:       dir,
-		Quality:         quality,
-		EmbedArt:        f.EmbedArt || cfg.EmbedArt,
-		IgnoreSingles:   f.AlbumsOnly || cfg.AlbumsOnly,
-		NoM3U:           f.NoM3U || cfg.NoM3U,
-		QualityFallback: !f.NoFallback && !cfg.NoFallback,
-		OGCover:         f.OGCover || cfg.OGCover,
-		NoCover:         f.NoCover || cfg.NoCover,
-		FolderFormat:    folderFmt,
-		TrackFormat:     trackFmt,
-		SmartDiscog:     f.SmartDiscog || cfg.SmartDiscog,
-		NoDB:            f.NoDB || cfg.NoDatabase,
-		DBPath:          cfg.DBPath,
-		Workers:         f.Workers,
+		Directory:               dir,
+		Quality:                 quality,
+		EmbedArt:                f.EmbedArt || cfg.EmbedArt,
+		CoverSizeEmbeddedPixels: coverSizeEmbeddedPixels,
+		IgnoreSingles:           f.AlbumsOnly || cfg.AlbumsOnly,
+		NoM3U:                   f.NoM3U || cfg.NoM3U,
+		QualityFallback:         !f.NoFallback && !cfg.NoFallback,
+		OGCover:                 f.OGCover || cfg.OGCover,
+		NoCover:                 f.NoCover || cfg.NoCover,
+		FolderFormat:            folderFmt,
+		TrackFormat:             trackFmt,
+		SmartDiscog:             f.SmartDiscog || cfg.SmartDiscog,
+		NoDB:                    f.NoDB || cfg.NoDatabase,
+		DBPath:                  cfg.DBPath,
+		Workers:                 f.Workers,
 	}
 	return downloader.New(client, opts)
 }

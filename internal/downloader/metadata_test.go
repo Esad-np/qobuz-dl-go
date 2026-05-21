@@ -1,6 +1,10 @@
 package downloader
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,7 +96,7 @@ func TestWriteID3v23_HasHeader(t *testing.T) {
 		"TALB": "My Album",
 		"TRCK": "1/10",
 	}
-	if err := writeID3v23(tmp, tags, false, ""); err != nil {
+	if err := writeID3v23(tmp, tags, false, "", 500); err != nil {
 		t.Fatalf("writeID3v23: %v", err)
 	}
 
@@ -119,7 +123,7 @@ func TestWriteID3v23_SkipsExistingID3(t *testing.T) {
 	copy(fakeID3[30:], []byte("\xff\xfbtest audio"))
 	os.WriteFile(tmp, fakeID3, 0644)
 
-	if err := writeID3v23(tmp, map[string]string{"TIT2": "New"}, false, ""); err != nil {
+	if err := writeID3v23(tmp, map[string]string{"TIT2": "New"}, false, "", 500); err != nil {
 		t.Fatalf("writeID3v23: %v", err)
 	}
 	data, _ := os.ReadFile(tmp)
@@ -239,6 +243,79 @@ func TestBuildMP3Tags_DefaultDiscNumber(t *testing.T) {
 	tags := buildMP3Tags(track, nil, true)
 	if tags["TPOS"] != "1" {
 		t.Errorf("TPOS = %q, want %q", tags["TPOS"], "1")
+	}
+}
+
+func TestFitWithin(t *testing.T) {
+	tests := []struct {
+		name          string
+		width, height int
+		maxSide       int
+		wantW, wantH  int
+	}{
+		{"landscape", 1200, 800, 500, 500, 333},
+		{"portrait", 800, 1200, 500, 333, 500},
+		{"small image unchanged", 200, 150, 500, 200, 150},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotW, gotH := fitWithin(tt.width, tt.height, tt.maxSide)
+			if gotW != tt.wantW || gotH != tt.wantH {
+				t.Fatalf("fitWithin(%d, %d, %d) = %dx%d, want %dx%d", tt.width, tt.height, tt.maxSide, gotW, gotH, tt.wantW, tt.wantH)
+			}
+		})
+	}
+}
+
+func TestLoadEmbeddedCover_DownscalesJPEG(t *testing.T) {
+	coverPath := filepath.Join(t.TempDir(), "cover.jpg")
+	orig := makeJPEG(t, 1200, 800)
+	if err := os.WriteFile(coverPath, orig, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, width, height, err := loadEmbeddedCover(coverPath, 500)
+	if err != nil {
+		t.Fatalf("loadEmbeddedCover: %v", err)
+	}
+	if width != 500 || height != 333 {
+		t.Fatalf("resized dimensions = %dx%d, want 500x333", width, height)
+	}
+	if bytes.Equal(got, orig) {
+		t.Fatal("expected resized JPEG bytes to differ from original")
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(got))
+	if err != nil {
+		t.Fatalf("DecodeConfig resized JPEG: %v", err)
+	}
+	if cfg.Width != 500 || cfg.Height != 333 {
+		t.Fatalf("decoded resized JPEG = %dx%d, want 500x333", cfg.Width, cfg.Height)
+	}
+	onDisk, err := os.ReadFile(coverPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, orig) {
+		t.Fatal("cover.jpg on disk was modified")
+	}
+}
+
+func TestLoadEmbeddedCover_DoesNotUpscale(t *testing.T) {
+	coverPath := filepath.Join(t.TempDir(), "cover.jpg")
+	orig := makeJPEG(t, 200, 150)
+	if err := os.WriteFile(coverPath, orig, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, width, height, err := loadEmbeddedCover(coverPath, 500)
+	if err != nil {
+		t.Fatalf("loadEmbeddedCover: %v", err)
+	}
+	if width != 200 || height != 150 {
+		t.Fatalf("dimensions = %dx%d, want 200x150", width, height)
+	}
+	if !bytes.Equal(got, orig) {
+		t.Fatal("expected original JPEG bytes when no downscale is needed")
 	}
 }
 
@@ -446,6 +523,21 @@ func containsBytes(data, sub []byte) bool {
 		}
 	}
 	return false
+}
+
+func makeJPEG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x % 255), G: uint8(y % 255), B: 120, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+		t.Fatalf("jpeg.Encode: %v", err)
+	}
+	return buf.Bytes()
 }
 
 // suppress unused import

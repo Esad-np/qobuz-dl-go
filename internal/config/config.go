@@ -44,27 +44,28 @@ const (
 
 // Config holds all runtime settings.
 type Config struct {
-	UserID         string
-	UserAuthToken  string
-	DownloadDir    string
-	DefaultFolder  string
-	DefaultQuality int
-	DefaultLimit   int
-	NoM3U          bool
-	AlbumsOnly     bool
-	NoFallback     bool
-	OGCover        bool
-	EmbedArt       bool
-	NoCover        bool
-	NoDatabase     bool
-	AppID          string
-	Secrets        []string
-	PrivateKey     string
-	FolderFormat   string
-	TrackFormat    string
-	SmartDiscog    bool
-	FilePath       string
-	DBPath         string
+	UserID                  string
+	UserAuthToken           string
+	DownloadDir             string
+	DefaultFolder           string
+	DefaultQuality          int
+	DefaultLimit            int
+	NoM3U                   bool
+	AlbumsOnly              bool
+	NoFallback              bool
+	OGCover                 bool
+	EmbedArt                bool
+	CoverSizeEmbeddedPixels int
+	NoCover                 bool
+	NoDatabase              bool
+	AppID                   string
+	Secrets                 []string
+	PrivateKey              string
+	FolderFormat            string
+	TrackFormat             string
+	SmartDiscog             bool
+	FilePath                string
+	DBPath                  string
 }
 
 // ConfigDir returns the OS config directory for qobuz-dl.
@@ -115,27 +116,28 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		UserID:         get("user_id", ""),
-		UserAuthToken:  get("user_auth_token", ""),
-		DownloadDir:    get("download_dir", ""),
-		DefaultFolder:  get("default_folder", "Qobuz Downloads"),
-		DefaultQuality: getInt("default_quality", 6),
-		DefaultLimit:   getInt("default_limit", 20),
-		NoM3U:          getBool("no_m3u"),
-		AlbumsOnly:     getBool("albums_only"),
-		NoFallback:     getBool("no_fallback"),
-		OGCover:        getBool("og_cover"),
-		EmbedArt:       getBool("embed_art"),
-		NoCover:        getBool("no_cover"),
-		NoDatabase:     getBool("no_database"),
-		AppID:          get("app_id", ""),
-		Secrets:        secrets,
-		PrivateKey:     get("private_key", ""),
-		FolderFormat:   get("folder_format", DefaultFolder),
-		TrackFormat:    get("track_format", DefaultTrack),
-		SmartDiscog:    getBool("smart_discography"),
-		FilePath:       cfgFile,
-		DBPath:         filepath.Join(dir, "qobuz_dl.db"),
+		UserID:                  get("user_id", ""),
+		UserAuthToken:           get("user_auth_token", ""),
+		DownloadDir:             get("download_dir", ""),
+		DefaultFolder:           get("default_folder", "Qobuz Downloads"),
+		DefaultQuality:          getInt("default_quality", 6),
+		DefaultLimit:            getInt("default_limit", 20),
+		NoM3U:                   getBool("no_m3u"),
+		AlbumsOnly:              getBool("albums_only"),
+		NoFallback:              getBool("no_fallback"),
+		OGCover:                 getBool("og_cover"),
+		EmbedArt:                getBool("embed_art"),
+		CoverSizeEmbeddedPixels: getInt("cover_size_embedded_pixels", 500),
+		NoCover:                 getBool("no_cover"),
+		NoDatabase:              getBool("no_database"),
+		AppID:                   get("app_id", ""),
+		Secrets:                 secrets,
+		PrivateKey:              get("private_key", ""),
+		FolderFormat:            get("folder_format", DefaultFolder),
+		TrackFormat:             get("track_format", DefaultTrack),
+		SmartDiscog:             getBool("smart_discography"),
+		FilePath:                cfgFile,
+		DBPath:                  filepath.Join(dir, "qobuz_dl.db"),
 	}, nil
 }
 
@@ -151,6 +153,7 @@ func setupPreferences(ctx context.Context, kv map[string]string) error {
 	kv["no_fallback"] = "false"
 	kv["og_cover"] = "false"
 	kv["embed_art"] = "false"
+	kv["cover_size_embedded_pixels"] = "500"
 	kv["no_cover"] = "false"
 	kv["no_database"] = "false"
 	kv["smart_discography"] = "false"
@@ -309,7 +312,7 @@ func writeINI(path string, kv map[string]string) error {
 		"email", "password", // legacy — kept for reading old configs
 		"download_dir", "default_folder", "default_quality", "default_limit",
 		"no_m3u", "albums_only", "no_fallback", "og_cover",
-		"embed_art", "no_cover", "no_database", "smart_discography",
+		"embed_art", "cover_size_embedded_pixels", "no_cover", "no_database", "smart_discography",
 		"app_id", "secrets", "private_key",
 		"folder_format", "track_format",
 	}

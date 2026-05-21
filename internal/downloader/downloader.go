@@ -39,20 +39,21 @@ var qualities = map[int]string{
 
 // Options configures the downloader.
 type Options struct {
-	Directory       string
-	Quality         int
-	EmbedArt        bool
-	IgnoreSingles   bool
-	NoM3U           bool
-	QualityFallback bool
-	OGCover         bool
-	NoCover         bool
-	FolderFormat    string
-	TrackFormat     string
-	SmartDiscog     bool
-	NoDB            bool
-	DBPath          string
-	Workers         int // concurrent track downloads per album (0 = default 3)
+	Directory               string
+	Quality                 int
+	EmbedArt                bool
+	CoverSizeEmbeddedPixels int
+	IgnoreSingles           bool
+	NoM3U                   bool
+	QualityFallback         bool
+	OGCover                 bool
+	NoCover                 bool
+	FolderFormat            string
+	TrackFormat             string
+	SmartDiscog             bool
+	NoDB                    bool
+	DBPath                  string
+	Workers                 int // concurrent track downloads per album (0 = default 3)
 }
 
 // Downloader handles URL processing and downloads.
@@ -76,6 +77,9 @@ func New(client *api.Client, opts Options) (*Downloader, error) {
 	}
 	if opts.Workers <= 0 {
 		opts.Workers = 3
+	}
+	if opts.CoverSizeEmbeddedPixels <= 0 {
+		opts.CoverSizeEmbeddedPixels = 500
 	}
 	if opts.Directory != "" {
 		if err := os.MkdirAll(opts.Directory, 0755); err != nil {
@@ -660,13 +664,13 @@ func (d *Downloader) downloadAndTag(
 
 	// Tag and rename
 	if isMP3 {
-		if err := tagMP3(tmpFile, dir, finalFile, trackMeta, albumMeta, isTrack, d.Opts.EmbedArt); err != nil {
+		if err := tagMP3(tmpFile, dir, finalFile, trackMeta, albumMeta, isTrack, d.Opts.EmbedArt, d.Opts.CoverSizeEmbeddedPixels); err != nil {
 			fmt.Printf("\033[31mWarning: could not tag %s: %v\033[0m\n", filepath.Base(finalFile), err)
 			// Still rename even if tagging failed
 			os.Rename(tmpFile, finalFile)
 		}
 	} else {
-		if err := tagFLAC(tmpFile, dir, finalFile, trackMeta, albumMeta, isTrack, d.Opts.EmbedArt); err != nil {
+		if err := tagFLAC(tmpFile, dir, finalFile, trackMeta, albumMeta, isTrack, d.Opts.EmbedArt, d.Opts.CoverSizeEmbeddedPixels); err != nil {
 			fmt.Printf("\033[31mWarning: could not tag %s: %v\033[0m\n", filepath.Base(finalFile), err)
 			os.Rename(tmpFile, finalFile)
 		}

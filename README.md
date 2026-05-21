@@ -198,6 +198,7 @@ The directory resolution follows the same priority chain as downloads: `-d` flag
 | `-d <dir>` | Download directory (overrides config) |
 | `-q <quality>` | Audio quality (see table below) |
 | `--embed-art` | Embed cover art into audio files |
+| `--cover-size-embedded-pixels <n>` | Resize embedded cover art to fit within `n x n` pixels; only downscales, never upscales |
 | `--albums-only` | Skip singles and EPs |
 | `--no-m3u` | Do not create M3U playlist files |
 | `--no-fallback` | Disable automatic quality fallback |

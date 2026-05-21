@@ -79,7 +79,7 @@ func TestLoad_ParsesSecretsCSV(t *testing.T) {
 		"default_folder = Qobuz Downloads\ndefault_quality = 6\n" +
 		"default_limit = 20\nno_m3u = false\nalbums_only = false\n" +
 		"no_fallback = false\nog_cover = false\nembed_art = false\n" +
-		"no_cover = false\nno_database = false\nsmart_discography = false\n" +
+		"cover_size_embedded_pixels = 500\nno_cover = false\nno_database = false\nsmart_discography = false\n" +
 		"app_id = 123456789\nsecrets = secret1,secret2,secret3\n" +
 		"private_key = mykey\n" +
 		"folder_format = {artist} - {album}\ntrack_format = {tracknumber}. {tracktitle}\n"
@@ -100,6 +100,9 @@ func TestLoad_ParsesSecretsCSV(t *testing.T) {
 	}
 	if cfg.DefaultQuality != 6 {
 		t.Errorf("DefaultQuality = %d", cfg.DefaultQuality)
+	}
+	if cfg.CoverSizeEmbeddedPixels != 500 {
+		t.Errorf("CoverSizeEmbeddedPixels = %d", cfg.CoverSizeEmbeddedPixels)
 	}
 }
 
