@@ -241,7 +241,9 @@ folder_format = {artist} - {album} ({year}) [{bit_depth}B-{sampling_rate}kHz]
 track_format  = {tracknumber}. {tracktitle}
 ```
 
-Available tokens: `{artist}`, `{album}`, `{year}`, `{bit_depth}`, `{sampling_rate}`, `{tracknumber}`, `{tracktitle}`, `{genre}`, `{composer}`.
+`folder_format` may include path separators to create nested directories, for example `{artist}/{album}`.
+
+Available tokens: `{artist}`, `{album}`, `{year}`, `{bit_depth}`, `{sampling_rate}`, `{disknumber}`, `{tracknumber}`, `{tracktitle}`, `{genre}`, `{composer}`.
 
 ## Downloads database
 

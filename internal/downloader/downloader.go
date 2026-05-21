@@ -301,10 +301,11 @@ func (d *Downloader) downloadAlbum(ctx context.Context, albumID, baseDir string)
 		"{album}":         sanitize(title),
 		"{year}":          year,
 		"{bit_depth}":     fmt.Sprintf("%v", bitDepth),
+		"{disknumber}":    "1",
 		"{sampling_rate}": fmt.Sprintf("%v", samplingRate),
 		"{format}":        fileFormat,
 	})
-	albumDir := filepath.Join(baseDir, sanitize(folderName))
+	albumDir := filepath.Join(baseDir, sanitizePathTemplate(folderName))
 	if err := os.MkdirAll(albumDir, 0755); err != nil {
 		return fmt.Errorf("create album directory %q: %w", albumDir, err)
 	}
@@ -373,12 +374,10 @@ func (d *Downloader) downloadAlbumExtras(ctx context.Context, meta map[string]in
 
 // detectMultiDisc reports whether the tracklist spans more than one disc.
 func detectMultiDisc(rawItems []interface{}) bool {
-	mediaNumbers := map[float64]bool{}
+	mediaNumbers := map[int]bool{}
 	for _, t := range rawItems {
 		if track, ok := t.(map[string]interface{}); ok {
-			if mn, ok := track["media_number"].(float64); ok {
-				mediaNumbers[mn] = true
-			}
+			mediaNumbers[mediaNumberOrDefault(track)] = true
 		}
 	}
 	return len(mediaNumbers) > 1
@@ -421,7 +420,7 @@ func (d *Downloader) collectTrackJobs(ctx context.Context, p *mpb.Progress, rawI
 
 		trackDir := albumDir
 		if isMultiDisc {
-			mn := int(track["media_number"].(float64))
+			mn := mediaNumberOrDefault(track)
 			trackDir = filepath.Join(albumDir, fmt.Sprintf("Disc %d", mn))
 			if err := os.MkdirAll(trackDir, 0755); err != nil {
 				fmt.Printf("\033[31mTrack %s: cannot create disc directory %q: %v. Skipping...\033[0m\n", trackID, trackDir, err)
@@ -538,9 +537,10 @@ func (d *Downloader) downloadTrackByID(ctx context.Context, trackID, baseDir str
 		"{album}":         sanitize(albumTitle),
 		"{year}":          year,
 		"{bit_depth}":     fmt.Sprintf("%v", int(bitDepth)),
+		"{disknumber}":    fmt.Sprintf("%d", mediaNumberOrDefault(meta)),
 		"{sampling_rate}": fmt.Sprintf("%v", samplingRate),
 	})
-	trackDir := filepath.Join(baseDir, sanitize(folderName))
+	trackDir := filepath.Join(baseDir, sanitizePathTemplate(folderName))
 	if err := os.MkdirAll(trackDir, 0755); err != nil {
 		return fmt.Errorf("create track directory %q: %w", trackDir, err)
 	}
@@ -631,6 +631,7 @@ func (d *Downloader) downloadAndTag(
 		"{artist}":        performer,
 		"{albumartist}":   nestedStr(albumMeta, "artist", "name"),
 		"{bit_depth}":     fmt.Sprintf("%v", trackMeta["maximum_bit_depth"]),
+		"{disknumber}":    fmt.Sprintf("%d", mediaNumberOrDefault(trackMeta)),
 		"{sampling_rate}": fmt.Sprintf("%v", trackMeta["maximum_sampling_rate"]),
 		"{version}":       fmt.Sprintf("%v", trackMeta["version"]),
 	}
@@ -1186,6 +1187,23 @@ func expandPlaceholders(format string, attrs map[string]string) string {
 	return result
 }
 
+func sanitizePathTemplate(s string) string {
+	s = strings.ReplaceAll(s, "\\", "/")
+	parts := strings.Split(s, "/")
+	clean := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = sanitize(part)
+		if part == "" || part == "." || part == ".." {
+			continue
+		}
+		clean = append(clean, part)
+	}
+	if len(clean) == 0 {
+		return ""
+	}
+	return filepath.Join(clean...)
+}
+
 // ---- URL parsing ----
 
 // reQobuzURL matches Qobuz URLs in multiple formats:
@@ -1278,6 +1296,28 @@ func releaseYear(meta map[string]interface{}) string {
 		return rd[:4]
 	}
 	return "0000"
+}
+
+func mediaNumberOrDefault(track map[string]interface{}) int {
+	switch v := track["media_number"].(type) {
+	case float64:
+		if v >= 1 {
+			return int(v)
+		}
+	case int:
+		if v >= 1 {
+			return v
+		}
+	case int64:
+		if v >= 1 {
+			return int(v)
+		}
+	case string:
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			return n
+		}
+	}
+	return 1
 }
 
 func isLocalFile(s string) bool {

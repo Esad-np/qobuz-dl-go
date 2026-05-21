@@ -193,6 +193,7 @@ func TestBuildFLACTags_IsTrack(t *testing.T) {
 	}
 	check("TITLE", "My Song")
 	check("TRACKNUMBER", "4")
+	check("DISCNUMBER", "1")
 	check("ARTIST", "Performer")
 	check("ALBUMARTIST", "Album Artist")
 	check("ALBUM", "My Album")
@@ -211,6 +212,33 @@ func TestBuildFLACTags_WithVersion(t *testing.T) {
 	tags := buildFLACTags(track, nil, true)
 	if tags["TITLE"] != "Track (Remastered)" {
 		t.Errorf("version not appended: %q", tags["TITLE"])
+	}
+}
+
+func TestBuildFLACTags_DefaultDiscNumber(t *testing.T) {
+	track := map[string]interface{}{
+		"title": "Track",
+		"album": map[string]interface{}{},
+	}
+	tags := buildFLACTags(track, nil, true)
+	if tags["DISCNUMBER"] != "1" {
+		t.Errorf("DISCNUMBER = %q, want %q", tags["DISCNUMBER"], "1")
+	}
+}
+
+func TestBuildMP3Tags_DefaultDiscNumber(t *testing.T) {
+	track := map[string]interface{}{
+		"title":        "Track",
+		"track_number": float64(1),
+		"album": map[string]interface{}{
+			"title":        "Album",
+			"artist":       map[string]interface{}{"name": "Artist"},
+			"tracks_count": float64(10),
+		},
+	}
+	tags := buildMP3Tags(track, nil, true)
+	if tags["TPOS"] != "1" {
+		t.Errorf("TPOS = %q, want %q", tags["TPOS"], "1")
 	}
 }
 

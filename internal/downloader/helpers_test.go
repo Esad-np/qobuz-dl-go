@@ -1,6 +1,9 @@
 package downloader
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 // ---- sanitize -----------------------------------------------------------
 
@@ -24,6 +27,42 @@ func TestSanitize(t *testing.T) {
 		if got := sanitize(c.in); got != c.want {
 			t.Errorf("sanitize(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestSanitizePathTemplate(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "preserves separators",
+			in:   "Radiohead/OK Computer",
+			want: filepath.Join("Radiohead", "OK Computer"),
+		},
+		{
+			name: "sanitizes each segment",
+			in:   `AC/DC/Live: 1995`,
+			want: filepath.Join("AC", "DC", "Live_ 1995"),
+		},
+		{
+			name: "drops empty and traversal segments",
+			in:   "../Radiohead//OK Computer/.",
+			want: filepath.Join("Radiohead", "OK Computer"),
+		},
+		{
+			name: "normalizes backslashes",
+			in:   `Radiohead\OK Computer`,
+			want: filepath.Join("Radiohead", "OK Computer"),
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sanitizePathTemplate(c.in); got != c.want {
+				t.Errorf("sanitizePathTemplate(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 
@@ -165,6 +204,27 @@ func TestIdStr(t *testing.T) {
 		if got := idStr(c.in); got != c.want {
 			t.Errorf("idStr(%v) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestMediaNumberOrDefault(t *testing.T) {
+	cases := []struct {
+		name  string
+		track map[string]interface{}
+		want  int
+	}{
+		{"missing", map[string]interface{}{}, 1},
+		{"float64", map[string]interface{}{"media_number": float64(2)}, 2},
+		{"string", map[string]interface{}{"media_number": "3"}, 3},
+		{"invalid string", map[string]interface{}{"media_number": "x"}, 1},
+		{"zero", map[string]interface{}{"media_number": float64(0)}, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := mediaNumberOrDefault(c.track); got != c.want {
+				t.Errorf("mediaNumberOrDefault(%v) = %d, want %d", c.track, got, c.want)
+			}
+		})
 	}
 }
 

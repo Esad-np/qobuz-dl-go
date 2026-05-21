@@ -39,9 +39,7 @@ func buildFLACTags(track, album map[string]interface{}, isTrack bool) map[string
 	if tn, ok := track["track_number"].(float64); ok {
 		t["TRACKNUMBER"] = fmt.Sprintf("%d", int(tn))
 	}
-	if mn, ok := track["media_number"].(float64); ok && mn > 1 {
-		t["DISCNUMBER"] = fmt.Sprintf("%d", int(mn))
-	}
+	t["DISCNUMBER"] = fmt.Sprintf("%d", mediaNumberOrDefault(track))
 	if composer := nestedStr(track, "composer", "name"); composer != "" {
 		t["COMPOSER"] = composer
 	}
@@ -362,9 +360,7 @@ func buildMP3Tags(track, album map[string]interface{}, isTrack bool) map[string]
 	}
 	t["TRCK"] = fmt.Sprintf("%d/%s", tn, trackTotal)
 
-	if mn, ok := track["media_number"].(float64); ok {
-		t["TPOS"] = fmt.Sprintf("%d", int(mn))
-	}
+	t["TPOS"] = fmt.Sprintf("%d", mediaNumberOrDefault(track))
 	return t
 }
 
